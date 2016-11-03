@@ -19,7 +19,7 @@ public class SoftSwitch {
 		List<PcapIf> alldevs = getAllDevices();
 		StringBuilder errbuf = new StringBuilder();
 
-		PcapIf device = chooseDevice(alldevs, 1);
+		PcapIf device = chooseDevice(alldevs, 0);
 
 		int snaplen = 64 * 1024; // Capture all packets, no trucation
 		int flags = Pcap.MODE_PROMISCUOUS; // capture all packets
@@ -92,7 +92,7 @@ public class SoftSwitch {
 			}
 		};
 
-		pcap.loop(1, jpacketHandler, "");
+		//pcap.loop(1, jpacketHandler, "");
 		pcap.close();
 
 	}
