@@ -2,14 +2,14 @@ package data;
 
 public class MACTableRecord {
 
-	String mac;
+	byte[] mac;
 	int port;
 	long timer;
 	
-	public String getMac() {
+	public byte[] getMac() {
 		return mac;
 	}
-	public void setMac(String mac) {
+	public void setMac(byte[] mac) {
 		this.mac = mac;
 	}
 	public int getPort() {
