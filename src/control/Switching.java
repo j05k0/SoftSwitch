@@ -12,7 +12,13 @@ import org.jnetpcap.Pcap;
 import org.jnetpcap.PcapIf;
 import org.jnetpcap.packet.PcapPacket;
 import org.jnetpcap.packet.PcapPacketHandler;
+import org.jnetpcap.packet.format.FormatUtils;
 import org.jnetpcap.protocol.lan.Ethernet;
+import org.jnetpcap.protocol.network.Arp;
+import org.jnetpcap.protocol.network.Icmp;
+import org.jnetpcap.protocol.network.Ip4;
+import org.jnetpcap.protocol.tcpip.Tcp;
+import org.jnetpcap.protocol.tcpip.Udp;
 
 import GUI.MainWindow;
 import data.MACTableRecord;
@@ -20,9 +26,8 @@ import data.MACTableRecord;
 public class Switching extends Thread {
 
 	private MainWindow m;
-	private AsString a = new AsString();
 	private HashMap<Integer, Integer> capturedPackets;
-	private HashMap<Integer, MACTableRecord> MACtable;
+	//private HashMap<Integer, MACTableRecord> MACtable;
 	private int portNumber;
 	private byte[] portMAC;
 	private PcapIf device;
@@ -43,41 +48,41 @@ public class Switching extends Thread {
 							m.printToSysLog("\n[" + portNumber + "]I have captured already sent packet. Dropping packet.");
 						}
 						else {
-
-							// mac adresy otestovat ci to dobre uklada plus dorobit
-							// tabulku do GUI
-
 							m.printToSysLog("\n[" + portNumber + "]New packet, putting into hash map.");
 							synchronized (capturedPackets) {
 								capturedPackets.put(hash, 1);
 							}
 							
-							synchronized (MACtable) {
-								hash = a.asString(e.source()).hashCode();
-								if (!MACtable.containsKey(hash)) {
+							updateStats(packet, true, portNumber);
+							
+							synchronized (main.MACtable) {
+								hash = FormatUtils.mac(e.source()).hashCode();
+								if (!main.MACtable.containsKey(hash)) {
 									MACTableRecord record = new MACTableRecord();
 									record.setMac(e.source());
 									record.setPort(portNumber);
-									record.setTimer(10000);
+									record.setTime(System.currentTimeMillis());
 									m.printToSysLog("[" + portNumber + "]New device, putting into MAC table.");
-									m.printToSysLog("[" + portNumber + "]New device: " + a.asString(record.getMac()) + " "
-											+ record.getPort() + " " + record.getTimer());
-									MACtable.put(hash, record);
-									m.updateMACtable(MACtable);
-									System.out.println(a.asString(record.getMac()) + " " + record.getPort());
+									m.printToSysLog("[" + portNumber + "]New device: " + FormatUtils.mac(record.getMac()) + " "
+											+ record.getPort() + " " + (10000 - (System.currentTimeMillis() - record.getTime())));
+									main.MACtable.put(hash, record);
+									m.updateMACtable();
+									System.out.println(FormatUtils.mac(record.getMac()) + " " + record.getPort());
 								} else {
-									if (MACtable.get(hash).getPort() != portNumber) {
+									if (main.MACtable.get(hash).getPort() != portNumber) {
 										m.printToSysLog("[" + portNumber + "]Update of port number on device "
-												+ a.asString(MACtable.get(hash).getMac()) + " from "
-												+ MACtable.get(hash).getPort() + " to " + portNumber);
-										MACtable.get(hash).setPort(portNumber);
-										m.updateMACtable(MACtable);
+												+ FormatUtils.mac(main.MACtable.get(hash).getMac()) + " from "
+												+ main.MACtable.get(hash).getPort() + " to " + portNumber);
+										main.MACtable.get(hash).setPort(portNumber);
+										main.MACtable.get(hash).setTime(System.currentTimeMillis());
+										m.updateMACtable();
 										System.out.println(
-												a.asString(MACtable.get(hash).getMac()) + " " + MACtable.get(hash).getPort());
+												FormatUtils.mac(main.MACtable.get(hash).getMac()) + " " + main.MACtable.get(hash).getPort());
 									} else {
 										m.printToSysLog("[" + portNumber + "]Port number with device "
-												+ a.asString(MACtable.get(hash).getMac()) + " is "
-												+ MACtable.get(hash).getPort());
+												+ FormatUtils.mac(main.MACtable.get(hash).getMac()) + " is "
+												+ main.MACtable.get(hash).getPort());
+										main.MACtable.get(hash).setTime(System.currentTimeMillis());
 									}
 								}
 							}
@@ -91,11 +96,11 @@ public class Switching extends Thread {
 									+ packet.getCaptureHeader().caplen() + " len=" + packet.getCaptureHeader().wirelen()
 									+ user);
 
-							synchronized (MACtable) {
-								hash = a.asString(e.destination()).hashCode();
-								if (MACtable.containsKey(hash)) {
-									if (MACtable.get(hash).getPort() != portNumber) {
-										device = chooseDevice(alldevs, MACtable.get(hash).getPort());
+							synchronized (main.MACtable) {
+								hash = FormatUtils.mac(e.destination()).hashCode();
+								if (main.MACtable.containsKey(hash)) {
+									if (main.MACtable.get(hash).getPort() != portNumber) {
+										device = chooseDevice(alldevs, main.MACtable.get(hash).getPort());
 										int snaplen = 64 * 1024;
 										int flags = Pcap.MODE_PROMISCUOUS;
 										int timeout = 1;
@@ -105,6 +110,7 @@ public class Switching extends Thread {
 										}
 										m.printToSysLog("[" + portNumber + "]Packet sent to " + device.getDescription());
 										pcap.close();
+										updateStats(packet, false, main.MACtable.get(hash).getPort());
 									} else {
 										m.printToSysLog("[" + portNumber
 												+ "]Sending packet to same port as income port. Dropping packet. ");
@@ -123,24 +129,11 @@ public class Switching extends Thread {
 											}
 											m.printToSysLog("[" + portNumber + "]Packet sent to " + dev.getDescription());
 											pcap.close();
+											updateStats(packet, false, i);
 										}
 									}
 								}
 							}
-							
-							// halooooooooo
-							/*
-							 * if(portNumber == 0){ device = chooseDevice(alldevs,
-							 * 1); } else{ device = chooseDevice(alldevs, 0); } int
-							 * snaplen = 64 * 1024; int flags =
-							 * Pcap.MODE_PROMISCUOUS; int timeout = 1; Pcap pcap =
-							 * Pcap.openLive(device.getName(), snaplen, flags,
-							 * timeout, errbuf); if (pcap.sendPacket(packet) !=
-							 * Pcap.OK) { System.err.println(pcap.getErr()); }
-							 * m.printToSysLog("[" + portNumber + "]Packet sent to "
-							 * + device.getDescription()); pcap.close();
-							 */
-
 						}
 					}
 				}
@@ -148,12 +141,11 @@ public class Switching extends Thread {
 		}
 	};
 
-	public Switching(MainWindow m, int portNumber, HashMap<Integer, Integer> capturedPackets,
-			HashMap<Integer, MACTableRecord> MACtable, List<PcapIf> alldevs) {
+	public Switching(MainWindow m, int portNumber, HashMap<Integer, Integer> capturedPackets, List<PcapIf> alldevs) {
 		this.m = m;
 		this.portNumber = portNumber;
 		this.capturedPackets = capturedPackets;
-		this.MACtable = MACtable;
+		//this.MACtable = MACtable;
 		this.alldevs = alldevs;
 	}
 
@@ -182,7 +174,6 @@ public class Switching extends Thread {
 		try {
 			return device.getHardwareAddress();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 			return null;
 		}
@@ -196,5 +187,32 @@ public class Switching extends Thread {
 		} else
 			m.printToSysLog("[" + portNumber + "]Name of chosen device: " + device.getName());
 		return device;
+	}
+	
+	public void updateStats(PcapPacket packet, boolean direction, int portNumber){
+		Ip4 ipv4 = new Ip4();
+		Tcp tcp = new Tcp();
+		Udp udp = new Udp();
+		Icmp icmp = new Icmp();
+		Arp arp = new Arp();
+		
+		if(packet.hasHeader(icmp)){
+			m.updateStatTable(portNumber, direction, 4);
+		}
+		if(packet.hasHeader(ipv4)){
+			m.updateStatTable(portNumber, direction, 1);
+			if(packet.hasHeader(tcp)){
+				m.updateStatTable(portNumber, direction, 2);
+			}
+			if(packet.hasHeader(udp)){
+				m.updateStatTable(portNumber, direction, 3);
+			}
+		}
+		if(packet.hasHeader(arp)){
+			m.updateStatTable(portNumber, direction, 5);
+		}
+		else{
+			//System.out.println("nic pravda");
+		}
 	}
 }

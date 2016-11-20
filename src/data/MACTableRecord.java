@@ -1,10 +1,12 @@
 package data;
 
-public class MACTableRecord {
+import control.Timer;
+
+public class MACTableRecord extends Thread {
 
 	byte[] mac;
 	int port;
-	long timer;
+	long time;
 	
 	public byte[] getMac() {
 		return mac;
@@ -18,12 +20,10 @@ public class MACTableRecord {
 	public void setPort(int port) {
 		this.port = port;
 	}
-	public long getTimer() {
-		return timer;
+	public long getTime() {
+		return time;
 	}
-	public void setTimer(long timer) {
-		this.timer = timer;
+	public void setTime(long time) {
+		this.time = time;
 	}
-	
-	
 }
